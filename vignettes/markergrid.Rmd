@@ -1,0 +1,115 @@
+---
+title: "Usage case of marker grid in single-cell RNA-Seq"
+author: "Dimitri Meistermann"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{markergrid}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  out.width = "100%",
+  fig.dim = c(12,12),
+  fig.align = "center",
+  cache = TRUE,
+  warning=FALSE
+)
+```
+
+With `markergrid` we can identify which gene is marking which area of a projection (here the UMAP).
+
+First, let's take a dataset from the scRNAseq package and extract the log count table. We use the [scran workflow](https://bioconductor.org/packages/devel/bioc/vignettes/scran/inst/doc/scran.html) to obtain a cleaned, normalized count table.
+
+```{r echo=FALSE}
+library(scran)
+library(scRNAseq)
+library(scuttle)
+library(ggplot2)
+
+#filtering
+sce <- GrunPancreasData()
+qcstats <- perCellQCMetrics(sce)
+qcfilter <- quickPerCellQC(qcstats, percent_subsets="altexps_ERCC_percent")
+sce <- sce[,!qcfilter$discard]
+
+#normalization
+clusters <- quickCluster(sce)
+sce <- computeSumFactors(sce, clusters=clusters)
+
+sce <- logNormCounts(sce)
+counts<-assay(sce,"counts") |> as.matrix()
+logcounts<-assay(sce,"logcounts") |> as.matrix()
+rm(sce)
+```
+
+For feature selection and PCA steps, We can use the [oob](https://github.com/DimitriMeistermann/oob) package (available only through github at this date).
+
+```{r echo=FALSE}
+library(oob)
+featureData<-oob::getMostVariableGenes(counts)
+overDispersedGenes<-rownames(featureData)[featureData$residuals>0] #only re
+
+rm(counts)
+gc() #free up some memory
+
+pcaSpace<-fastPCA(logcounts[overDispersedGenes,],nPC = 30)$x |> t()
+```
+
+Then we can use oob to compute a UMAP, cluster the cells using Leiden community detection and project it.
+
+```{r}
+umapProj<-oob::UMAP(pcaSpace,n_neighbors = 50,ret_nn = TRUE)
+leidenClustering<-leidenFromUMAP(umapProj,n_neighbors = 50)
+proj2d(umapProj,colorBy = leidenClustering,useScatterMore = TRUE)
+
+```
+
+Finally, we can detect which genes are marker of each area of the UMAP using marker grid. We only input the overdispersed genes to minimize noise and computation time.
+```{r}
+library(markergrid)
+proj2d(umapProj,colorBy = leidenClustering,useScatterMore = TRUE,returnGraph = TRUE) + 
+        markergrid(umapProj$embedding,featureMat = logcounts[overDispersedGenes,])+
+        scale_size_continuous(c(1.5,4)) #adjust mimimal/max size
+```
+
+The text plotting function can be given by the user. Let's try with ggrepel to avoid collision between feature names on the grid.
+```{r}
+library(markergrid)
+library(ggrepel)
+proj2d(umapProj,colorBy = leidenClustering,useScatterMore = TRUE,returnGraph = TRUE) + 
+        markergrid(umapProj$embedding,featureMat = logcounts[overDispersedGenes,],geomTextFun = geom_text_repel)
+```
+
+Another make the plot less busy is to reduce the number of points in the grid.
+```{r}
+proj2d(umapProj,colorBy = leidenClustering,useScatterMore = TRUE,returnGraph = TRUE) + 
+        markergrid(umapProj$embedding,featureMat = logcounts[overDispersedGenes,],geomTextFun = geom_text, gridResolution = 8)
+```
+In order to make different plots without recomputing the grid each time, we can save it using the return grid argument.
+
+```{r}
+grid_res<-markergrid(umapProj$embedding,featureMat = logcounts[overDispersedGenes,], returnGrid = TRUE)
+
+ggplot(data.frame(umap1 = umapProj$embedding[,1], umap2 = umapProj$embedding[,2]),aes(x=umap1,y=umap2))+
+    geom_point()+
+    geom_text(
+                data = grid_res,
+                inherit.aes = FALSE,
+                mapping = aes(
+                    x = X,
+                    y = Y,
+                    label = best,
+                    size = sizeScore
+                )
+            )
+
+```
+# Session Info
+```{r}
+sessionInfo()
+```
+

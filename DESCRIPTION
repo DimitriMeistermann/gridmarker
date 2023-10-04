@@ -1,0 +1,29 @@
+Package: markergrid
+Type: Package
+Title: markergrid: Project features marking each area of a projection
+Version: 0.1.0
+Authors@R: person("Dimitri", "Meistermann", email = "dimitri.meistermann@helsinki.fi",role = c("aut", "cre"), comment=c(ORCID="0000-0001-6614-2325"))
+Description: Create a grid of points with the specified grid_size. For each point on the grid, find its neighborhood by looking at the points in the dataset that are closest to it. For each feature in feature_names, calculate the specificity of that feature in the neighborhood of the grid point. This could be done using a metric such as the average distance between points that have that feature and points that do not have that feature. Display the feature name with the highest specificity for each grid point.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: false
+biocViews:
+	Software,
+	BiologicalQuestion,
+	DifferentialExpression
+VignetteBuilder: knitr
+RoxygenNote: 7.2.3
+Roxygen: list(markdown = TRUE)
+Imports: 
+    shadowtext,
+    ggplot2,
+    foreach,
+    stats
+Suggests:
+	  knitr,
+	  rmarkdown,
+  	scran,
+	  scRNAseq,
+    scuttle,
+    ggrepel,
+    oob
