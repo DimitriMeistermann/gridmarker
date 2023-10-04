@@ -1,3 +1,4 @@
+
 #' Project features linked to a projection from each point on a grid
 #'
 #' @param proj Matrix or dataframe containing at least two vectors of numeric corresponding to the x/y coordinates.
@@ -41,16 +42,16 @@
 #' grid<-markergrid(irisUMAP,qDataIris, returnGrid=TRUE)
 markergrid <-
     function(proj,
-            featureMat,
-            gridResolution = 15,
-            method = c("aurocFC", "auroc", "FC"),
-            grid = NULL,
-            transpose = TRUE,
-            geomTextFun = shadowtext::geom_shadowtext,
-            fontface = "bold.italic",
-            returnPseudoSamples = FALSE,
-            returnGrid = FALSE,
-            ...) {
+             featureMat,
+             gridResolution = 15,
+             method = c("aurocFC", "auroc", "FC"),
+             grid = NULL,
+             transpose = TRUE,
+             geomTextFun = shadowtext::geom_shadowtext,
+             fontface = "bold.italic",
+             returnPseudoSamples = FALSE,
+             returnGrid = FALSE,
+             ...) {
         if (transpose)
             featureMat <- t(featureMat)
         if (is.null(colnames(featureMat)))
@@ -59,7 +60,23 @@ markergrid <-
         if (!method %in% c("aurocFC", "auroc", "FC"))
             stop("method should have one of the following value: 'aurocFC', 'auroc' or 'FC'")
         if (is.null(grid)) {
-            grid<-buildEmptyGrid(proj, gridResolution)
+            minX <- min(proj[, 1])
+            maxX <- max(proj[, 1])
+            minY <- min(proj[, 2])
+            maxY <- max(proj[, 2])
+
+            xrange <- maxX - minX
+            yrange <- maxY - minY
+
+            radius <- sqrt(xrange * yrange) / gridResolution
+
+            gridX <- seq(minX - radius, maxX + radius, radius)
+            gridY <- seq(minY - radius, maxY + radius, radius)
+
+            grid <- data.frame(expand.grid(gridX, gridY))
+            colnames(grid) <- c("X", "Y")
+
+            grid$nContrib <- NULL
 
             pseudoSamples <-
                 matrix(
@@ -69,7 +86,7 @@ markergrid <-
                 )
             colnames(pseudoSamples) <- colnames(featureMat)
 
-            hasVal <- foreach(i = seq_along(nrow(grid))) %do% {
+            hasVal <- foreach(i = seq_len(nrow(grid))) %do% {
                 centerX <- grid[i, 1]
                 centerY <- grid[i, 2]
 
@@ -87,7 +104,7 @@ markergrid <-
                     sqrt((isContribX - centerX) ^ 2 + (isContribY - centerY) ^ 2)
 
                 w <-  1 - (dist2center / radius)
-                pseudoSamples[i, ] <-
+                pseudoSamples[i,] <-
                     apply(featureMat[isContrib2Grid, , drop = FALSE], 2, function(x)
                         stats::weighted.mean(x, w))
 
@@ -95,14 +112,15 @@ markergrid <-
             }
             hasVal <- unlist(hasVal)
 
-            grid <- grid[hasVal, ]
+            grid <- grid[hasVal,]
             pseudoSamples <- pseudoSamples[hasVal, , drop = FALSE]
 
             if (returnPseudoSamples)
                 return(pseudoSamples)
 
-            pseudoSamples <- scale(pseudoSamples, center = TRUE, scale = FALSE)
-            rowIndex <- seq_along(nrow(pseudoSamples))
+            pseudoSamples <-
+                scale(pseudoSamples, center = TRUE, scale = FALSE)
+            rowIndex <- seq_len(nrow(pseudoSamples))
 
             if (method == "aurocFC" | method == "auroc")
                 aurocs <- apply(pseudoSamples, 2, function(f) {
@@ -110,7 +128,7 @@ markergrid <-
                     n1 <- length(f) - 1
 
                     res <-
-                        vapply(seq_along(length(scoreRank)), FUN.VALUE = numeric(1), function(i)
+                        vapply(seq_along(scoreRank), FUN.VALUE = numeric(1), function(i)
                             sum(scoreRank[-i]))
                     1 - (res - n1 * (n1 + 1) / 2) / n1
                 })
@@ -127,8 +145,9 @@ markergrid <-
 
             grid$score <-
                 NULL
-            for (i in seq_along(nrow(pseudoSamples)))
-                grid[i, "score"] <-  pseudoSamples[i, maxValIndex[i]]
+            for (i in seq_len(nrow(pseudoSamples)))
+                grid[i, "score"] <-
+                pseudoSamples[i, maxValIndex[i]]
             grid$sizeScore <-  grid$score * grid$nContrib
         }
 
@@ -136,37 +155,18 @@ markergrid <-
         if (returnGrid)
             return(grid)
 
-        return(geomTextFun(
-            data = grid,
-            inherit.aes = FALSE,
-            mapping = aes_string(
-                x = "X",
-                y = "Y",
-                label = "best",
-                size = "sizeScore"
-            ),
-            fontface = fontface,
-            ...
-        ))
+        return(
+            geomTextFun(
+                data = grid,
+                inherit.aes = FALSE,
+                mapping = aes_string(
+                    x = "X",
+                    y = "Y",
+                    label = "best",
+                    size = "sizeScore"
+                ),
+                fontface = fontface,
+                ...
+            )
+        )
     }
-
-buildEmptyGrid<-function(proj, gridResolution){
-    minX <- min(proj[, 1])
-    maxX <- max(proj[, 1])
-    minY <- min(proj[, 2])
-    maxY <- max(proj[, 2])
-
-    xrange <- maxX - minX
-    yrange <- maxY - minY
-
-    radius <- sqrt(xrange * yrange) / gridResolution
-
-    gridX <- seq(minX - radius, maxX + radius, radius)
-    gridY <- seq(minY - radius, maxY + radius, radius)
-
-    grid <- data.frame(expand.grid(gridX, gridY))
-    colnames(grid) <- c("X", "Y")
-
-    grid$nContrib <- NULL
-    return(grid)
-}
